@@ -2,8 +2,8 @@
 VERSION = 4
 PATCHLEVEL = 14
 SUBLEVEL = 341
-EXTRAVERSION = -openela
-NAME = Petit Gorille
+EXTRAVERSION = CALY-Bambie
+NAME = CALY-Bambie
 
 # *DOCUMENTATION*
 # To see a list of typical targets execute "make help"
