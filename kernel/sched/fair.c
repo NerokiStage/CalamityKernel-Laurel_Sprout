@@ -1528,7 +1528,7 @@ bool should_numa_migrate_memory(struct task_struct *p, struct page * page,
 	       group_faults_cpu(ng, src_nid) * group_faults(p, dst_nid) * 4;
 }
 
-static unsigned long weighted_cpuload(struct rq *rq);
+static unsigned long cpu_runnable_load(struct rq *rq);
 static unsigned long source_load(int cpu, int type);
 static unsigned long target_load(int cpu, int type);
 
@@ -1558,7 +1558,7 @@ static void update_numa_stats(struct numa_stats *ns, int nid)
 		struct rq *rq = cpu_rq(cpu);
 
 		ns->nr_running += rq->nr_running;
-		ns->load += weighted_cpuload(rq);
+		ns->load += cpu_runnable_load(rq);
 		ns->compute_capacity += capacity_of(cpu);
 
 		cpus++;
@@ -5659,7 +5659,7 @@ static void cpu_load_update(struct rq *this_rq, unsigned long this_load,
 }
 
 /* Used instead of source_load when we know the type == 0 */
-static unsigned long weighted_cpuload(struct rq *rq)
+static unsigned long cpu_runnable_load(struct rq *rq)
 {
 	return cfs_rq_runnable_load_avg(&rq->cfs);
 }
@@ -5706,7 +5706,7 @@ static void cpu_load_update_idle(struct rq *this_rq)
 	/*
 	 * bail if there's load or we're actually up-to-date.
 	 */
-	if (weighted_cpuload(this_rq))
+	if (cpu_runnable_load(this_rq))
 		return;
 
 	cpu_load_update_nohz(this_rq, READ_ONCE(jiffies), 0);
@@ -5723,11 +5723,11 @@ void cpu_load_update_nohz_start(void)
 	struct rq *this_rq = this_rq();
 
 	/*
-	 * This is all lockless but should be fine. If weighted_cpuload changes
+	 * This is all lockless but should be fine. If cpu_runnable_load changes
 	 * concurrently we'll exit nohz. And cpu_load write can race with
 	 * cpu_load_update_idle() but both updater would be writing the same.
 	 */
-	this_rq->cpu_load[0] = weighted_cpuload(this_rq);
+	this_rq->cpu_load[0] = cpu_runnable_load(this_rq);
 }
 
 /*
@@ -5743,7 +5743,7 @@ void cpu_load_update_nohz_stop(void)
 	if (curr_jiffies == this_rq->last_load_update_tick)
 		return;
 
-	load = weighted_cpuload(this_rq);
+	load = cpu_runnable_load(this_rq);
 	rq_lock(this_rq, &rf);
 	update_rq_clock(this_rq);
 	cpu_load_update_nohz(this_rq, curr_jiffies, load);
@@ -5769,7 +5769,7 @@ static void cpu_load_update_periodic(struct rq *this_rq, unsigned long load)
  */
 void cpu_load_update_active(struct rq *this_rq)
 {
-	unsigned long load = weighted_cpuload(this_rq);
+	unsigned long load = cpu_runnable_load(this_rq);
 
 	if (tick_nohz_tick_stopped())
 		cpu_load_update_nohz(this_rq, READ_ONCE(jiffies), load);
@@ -5787,7 +5787,7 @@ void cpu_load_update_active(struct rq *this_rq)
 static unsigned long source_load(int cpu, int type)
 {
 	struct rq *rq = cpu_rq(cpu);
-	unsigned long total = weighted_cpuload(rq);
+	unsigned long total = cpu_runnable_load(rq);
 
 	if (type == 0 || !sched_feat(LB_BIAS))
 		return total;
@@ -5802,7 +5802,7 @@ static unsigned long source_load(int cpu, int type)
 static unsigned long target_load(int cpu, int type)
 {
 	struct rq *rq = cpu_rq(cpu);
-	unsigned long total = weighted_cpuload(rq);
+	unsigned long total = cpu_runnable_load(rq);
 
 	if (type == 0 || !sched_feat(LB_BIAS))
 		return total;
@@ -5814,7 +5814,7 @@ static unsigned long cpu_avg_load_per_task(int cpu)
 {
 	struct rq *rq = cpu_rq(cpu);
 	unsigned long nr_running = READ_ONCE(rq->cfs.h_nr_running);
-	unsigned long load_avg = weighted_cpuload(rq);
+	unsigned long load_avg = cpu_runnable_load(rq);
 
 	if (nr_running)
 		return load_avg / nr_running;
@@ -7073,7 +7073,7 @@ find_idlest_group_cpu(struct sched_group *group, struct task_struct *p, int this
 				shallowest_idle_cpu = i;
 			}
 		} else if (shallowest_idle_cpu == -1) {
-			load = weighted_cpuload(cpu_rq(i));
+			load = cpu_runnable_load(cpu_rq(i));
 			if (load < min_load || (load == min_load && i == this_cpu)) {
 				min_load = load;
 				least_loaded_cpu = i;
@@ -10194,7 +10194,7 @@ static inline void update_sg_lb_stats(struct lb_env *env,
 		sgs->nr_numa_running += rq->nr_numa_running;
 		sgs->nr_preferred_running += rq->nr_preferred_running;
 #endif
-		sgs->sum_weighted_load += weighted_cpuload(rq);
+		sgs->sum_weighted_load += cpu_runnable_load(rq);
 		/*
 		 * No need to call idle_cpu() if nr_running is not 0
 		 */
@@ -11001,10 +11001,10 @@ static struct rq *find_busiest_queue(struct lb_env *env,
 		    rq->nr_running == 1)
 			continue;
 
-		wl = weighted_cpuload(rq);
+		wl = cpu_runnable_load(rq);
 
 		/*
-		 * When comparing with imbalance, use weighted_cpuload()
+		 * When comparing with imbalance, use cpu_runnable_load()
 		 * which is not scaled with the cpu capacity.
 		 */
 
@@ -11014,7 +11014,7 @@ static struct rq *find_busiest_queue(struct lb_env *env,
 
 		/*
 		 * For the load comparisons with the other cpu's, consider
-		 * the weighted_cpuload() scaled with the cpu capacity, so
+		 * the cpu_runnable_load() scaled with the cpu capacity, so
 		 * that the load can be moved away from the cpu that is
 		 * potentially running at a lower capacity.
 		 *
